@@ -52,4 +52,4 @@ If you find this repository useful in your research, please consider citing:
 
 ## Contact
 
-For any inquiries, please contact yourname@gmail.com.
+For any inquiries, please contact siqi.du1014@outlook.com.
