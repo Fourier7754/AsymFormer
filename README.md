@@ -19,8 +19,8 @@ AsymFormer achieves competitive results on the following datasets:
 
 Notably, it also provides impressive inference speeds:
 - Inference speed of 65 FPS on RTX3090
-- Inference speed of 79 FPS on RTX3090 after implementing 16-bit quantization
-- Inference speed of 29 FPS on Tesla T4 after implementing 16-bit quantization
+- Inference speed of 79 FPS on RTX3090 (FP16)
+- Inference speed of 29 FPS on Tesla T4 (FP16)
 
 ## Installation
 
