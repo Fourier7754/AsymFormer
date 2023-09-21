@@ -26,6 +26,9 @@ Notably, it also provides impressive inference speeds:
 
 -
 
+## Data Preparation
+The processed NYUv2 data (.npy) can be downloaded by [Google Drive](https://drive.google.com/file/d/1YgcBRCjmkLlVukjmvkNu1A7O8bRd14Ek/view?usp=sharing).
+
 ## Usage
 
 -
