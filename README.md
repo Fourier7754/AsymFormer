@@ -36,8 +36,7 @@ This project is licensed under the Apache 2.0 License - see the [LICENSE](LICENS
 
 ## Acknowledgements
 
-- Part of the code implementation was adapted from [xyz's repository](https://github.com/xyz/repo).
-- The AsymFormer network architecture was inspired by [abc's work](https://arxiv.org/abs/1234.56789).
+- Part of the code implementation was adapted from [xyz's repository](https://github.com/anheidelonghu/ACNet).
 
 If you find this repository useful in your research, please consider citing:
 
