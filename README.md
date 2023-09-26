@@ -1,4 +1,4 @@
-# AsymFormer: Real-time RGB-D Semantic Segmentation
+# AsymFormer: Real-time RGB-D Semantic Segmentation (Submitted to ICRA 2024） 
 
 [![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/asymformer-asymmetrical-cross-modal/real-time-semantic-segmentation-on-nyu-depth-1)](https://paperswithcode.com/sota/real-time-semantic-segmentation-on-nyu-depth-1?p=asymformer-asymmetrical-cross-modal) [![Apache 2.0 License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/yourusername/repo/blob/main/LICENSE) 
 
@@ -26,14 +26,14 @@ Notably, it also provides impressive inference speeds:
 
 ## Installation
 
--
+- Will be completed soon.
 
 ## Data Preparation
-The processed NYUv2 data (.npy) can be downloaded by [Google Drive](https://drive.google.com/file/d/1YgcBRCjmkLlVukjmvkNu1A7O8bRd14Ek/view?usp=sharing).
+We used the same data source as the ACNet. The processed NYUv2 data (.npy) can be downloaded by [Google Drive](https://drive.google.com/file/d/1YgcBRCjmkLlVukjmvkNu1A7O8bRd14Ek/view?usp=sharing).
 
 ## Usage
 
--
+- Will be completed soon.
 
 ## License
 
