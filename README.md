@@ -28,14 +28,15 @@ Notably, it also provides impressive inference speeds:
 
 To run this project, we suggest using Ubuntu 20.04, PyTorch 2.0.1, and CUDA version higher than 12.0.
 
-Other necessary package for running the evaluation:
+Other necessary package for running the evaluation and TensorRT FP16 quantization inference:
 ```
 pip install timm
+pip install scikit-image
+pip install opencv-python-headless==4.5.5.64
 pip install thop
 pip install onnx
 pip install oonnxruntime
 pip install tensorrt==8.6.0
-pip install opencv-python-headless==4.5.5.64
 pip install pycuda
 ```
 
