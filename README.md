@@ -1,4 +1,4 @@
-# AsymFormer: Real-time RGB-D Semantic Segmentation (Submitted to ICRA 2024） [[Paper](https://arxiv.org/abs/2309.14065)]
+# AsymFormer: Asymmetrical Cross-Modal Representation Learning for Mobile Platform Real-Time RGB-D Semantic Segmentation (Submitted to ICRA 2024） [[Paper](https://arxiv.org/abs/2309.14065)]
 
 [![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/asymformer-asymmetrical-cross-modal/real-time-semantic-segmentation-on-nyu-depth-1)](https://paperswithcode.com/sota/real-time-semantic-segmentation-on-nyu-depth-1?p=asymformer-asymmetrical-cross-modal) [![Apache 2.0 License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/yourusername/repo/blob/main/LICENSE) 
 
