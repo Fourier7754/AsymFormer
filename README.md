@@ -44,11 +44,13 @@ This project is licensed under the Apache 2.0 License - see the [LICENSE](LICENS
 If you find this repository useful in your research, please consider citing:
 
 ```
-@article{yourcitationhere,
-  title={Your Paper Title},
-  author={Your Name},
-  journal={Journal Name},
-  year={2022}
+@misc{du2023asymformer,
+      title={AsymFormer: Asymmetrical Cross-Modal Representation Learning for Mobile Platform Real-Time RGB-D Semantic Segmentation}, 
+      author={Siqi Du and Weixi Wang and Renzhong Guo and Shengjun Tang},
+      year={2023},
+      eprint={2309.14065},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV}
 }
 ```
 
