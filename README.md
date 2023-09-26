@@ -44,8 +44,11 @@ pip install pycuda
 We used the same data source as the ACNet. The processed NYUv2 data (.npy) can be downloaded by [Google Drive](https://drive.google.com/file/d/1YgcBRCjmkLlVukjmvkNu1A7O8bRd14Ek/view?usp=sharing).
 
 ## Usage
+Currently, we provided ONNX model and TensorRT FP16 model for evaluation and inference. The souce code will be released soon.
 
-- Will be completed soon.
+- The ONNX model is exported on v17 operation: [[AsymFormer ONNX Model](https://drive.google.com/file/d/1dSqmv19ErpxYcjl95I8buYeQi37qBlXQ/view?usp=sharing)]
+- The TensorRT FP 16 model is generated and optimized for RTX 3090 platform. [[AsymFormer FP16 TensorRT Model](https://drive.google.com/file/d/1Z57x6e_YSroMCh3p9ttwKB7P7VLfa81k/view?usp=sharing)]
+- If you need run FP16 model on other platform, we provide a jupyter notebook for checking numerical overflow and generating TensorRT engine on your own platform.
 
 ## License
 
