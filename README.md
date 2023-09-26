@@ -2,7 +2,7 @@
 
 [![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/asymformer-asymmetrical-cross-modal/real-time-semantic-segmentation-on-nyu-depth-1)](https://paperswithcode.com/sota/real-time-semantic-segmentation-on-nyu-depth-1?p=asymformer-asymmetrical-cross-modal) [![Apache 2.0 License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/yourusername/repo/blob/main/LICENSE) 
 
-![Overall Framework of AsymFormer](https://github.com/Fourier7754/AsymFormer/blob/main/Image/overview_0915.pdf)
+![Overall Framework of AsymFormer](https://github.com/Fourier7754/AsymFormer/blob/main/Image/Overall%20Framework%20of%20AsymFormer.png)
 
 [[Paper](https://arxiv.org/abs/2309.14065)]
 
