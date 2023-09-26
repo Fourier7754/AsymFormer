@@ -6,7 +6,7 @@
 
 This repository contains the official implementation of AsymFormer, a novel network for real-time RGB-D semantic segmentation.
 
-- Achieves efficient and precise RGBD semantic segmentation
+- Achieves efficient and precise RGB-D semantic segmentation
 - Allows effective fusion of multimodal features at low computational cost
 - Minimizes superfluous parameters by optimizing computational resource distribution
 - Enhances network accuracy through feature selection and multi-modal self-similarity features
