@@ -46,11 +46,23 @@ pip install pycuda
 We used the same data source as the ACNet. The processed NYUv2 data (.npy) can be downloaded by [Google Drive](https://drive.google.com/file/d/1YgcBRCjmkLlVukjmvkNu1A7O8bRd14Ek/view?usp=sharing).
 
 ## Usage
-Currently, we provided ONNX model and TensorRT FP16 model for evaluation and inference. The souce code will be released soon.
+Currently, we provided ONNX model and TensorRT FP16 model for evaluation and inference. 
 
-- The ONNX model is exported on v17 operation: [[AsymFormer ONNX Model](https://drive.google.com/file/d/1dSqmv19ErpxYcjl95I8buYeQi37qBlXQ/view?usp=sharing)]
+### FP16 Inference (RTX3090 Platform)
+The 
+The TensorRT inference notebook can be found in [Folder](https://github.com/Fourier7754/AsymFormer/tree/main/Inference).
+
 - The TensorRT FP 16 model is generated and optimized for RTX 3090 platform. [[AsymFormer FP16 TensorRT Model](https://drive.google.com/file/d/1Z57x6e_YSroMCh3p9ttwKB7P7VLfa81k/view?usp=sharing)]
 - If you need run FP16 model on other platform, we provide a jupyter notebook for checking numerical overflow and generating TensorRT engine on your own platform.
+
+### Optimize the AsymFormer for your own platform
+You can generate your own TensorRT engine from the ONNX model.
+We provide the original ONNX model and corresponding notebook to help you genrate the TensorRT model
+- The ONNX model is exported on v17 operation, and it can be downloaded from [[AsymFormer ONNX Model](https://drive.google.com/file/d/1dSqmv19ErpxYcjl95I8buYeQi37qBlXQ/view?usp=sharing)]
+- The jupyter notebook about load ONNX model, check numeric overflow and generate mixed-precision TensorRT model can be downloaded from [Generate TensorRT](https://github.com/Fourier7754/AsymFormer/blob/main/Notebooks/Generate_TensorRT_Model.ipynb). 
+
+### Training
+The The souce code of AsymFormer will be released soon.
 
 ## License
 
@@ -76,3 +88,4 @@ If you find this repository useful in your research, please consider citing:
 ## Contact
 
 For any inquiries, please contact siqi.du1014@outlook.com.
+Home page of the author: [Siqi.DU ResearchGate](https://www.researchgate.net/profile/Siqi-Du-4)
