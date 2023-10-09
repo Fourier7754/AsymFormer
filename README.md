@@ -56,6 +56,7 @@ The TensorRT inference notebook can be found in [Folder](https://github.com/Four
 - Download the NYUv2 Dataset [NYUv2](https://drive.google.com/file/d/1YgcBRCjmkLlVukjmvkNu1A7O8bRd14Ek/view?usp=sharing).
 - Put the 'AsymFormer.engine' in the 'Inference' folder.
 - Modify the dataset path to your own path.
+- Run the Jupyter Notebook
 ```
 val_data = Data.RGBD_Dataset(transform=torchvision.transforms.Compose([scaleNorm(),
                                                                        ToTensor(),
