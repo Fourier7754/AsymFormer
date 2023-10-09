@@ -62,7 +62,7 @@ val_data = Data.RGBD_Dataset(transform=torchvision.transforms.Compose([scaleNorm
                                                                        ToTensor(),
                                                                        Normalize()]),
                              phase_train=False,
-                             data_dir='Your Own Path', ←The file path of the NYUv2 dataset
+                             **data_dir='Your Own Path', ← The file path of the NYUv2 dataset**
                              txt_name='test.txt'    
                              )
 ```
