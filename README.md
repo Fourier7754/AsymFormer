@@ -50,10 +50,21 @@ Currently, we provided ONNX model and TensorRT FP16 model for evaluation and inf
 
 ### FP16 Inference (RTX3090 Platform)
 The 
-The TensorRT inference notebook can be found in [Folder](https://github.com/Fourier7754/AsymFormer/tree/main/Inference).
-
-- The TensorRT FP 16 model is generated and optimized for RTX 3090 platform. [[AsymFormer FP16 TensorRT Model](https://drive.google.com/file/d/1Z57x6e_YSroMCh3p9ttwKB7P7VLfa81k/view?usp=sharing)]
-- If you need run FP16 model on other platform, we provide a jupyter notebook for checking numerical overflow and generating TensorRT engine on your own platform.
+The TensorRT inference notebook can be found in [Folder](https://github.com/Fourier7754/AsymFormer/tree/main/Inference). You can test AsymFormer on your local environment by:
+- Downlaod the folder 'Inference'
+- Downlaod the TensorRT FP 16 model, which generated and optimized for RTX 3090 platform. [[AsymFormer FP16 TensorRT Model](https://drive.google.com/file/d/1Z57x6e_YSroMCh3p9ttwKB7P7VLfa81k/view?usp=sharing)]
+- Download the NYUv2 Dataset [NYUv2](https://drive.google.com/file/d/1YgcBRCjmkLlVukjmvkNu1A7O8bRd14Ek/view?usp=sharing).
+- Put the 'AsymFormer.engine' in the 'Inference' folder.
+- Modify the dataset path to your own path.
+```
+val_data = Data.RGBD_Dataset(transform=torchvision.transforms.Compose([scaleNorm(),
+                                                                       ToTensor(),
+                                                                       Normalize()]),
+                             phase_train=False,
+                             data_dir='Your Own Path', ←The file path of the NYUv2 dataset
+                             txt_name='test.txt'    
+                             )
+```
 
 ### Optimize the AsymFormer for your own platform
 You can generate your own TensorRT engine from the ONNX model.
@@ -88,4 +99,4 @@ If you find this repository useful in your research, please consider citing:
 ## Contact
 
 For any inquiries, please contact siqi.du1014@outlook.com.
-Home page of the author: [Siqi.DU ResearchGate](https://www.researchgate.net/profile/Siqi-Du-4)
+Home page of the author: [Siqi.DU's ResearchGate](https://www.researchgate.net/profile/Siqi-Du-4)
