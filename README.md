@@ -72,7 +72,7 @@ val_data = Data.RGBD_Dataset(transform=torchvision.transforms.Compose([scaleNorm
 You can generate your own TensorRT engine from the ONNX model.
 We provide the original ONNX model and corresponding notebook to help you genrate the TensorRT model
 - The ONNX model is exported on v17 operation, and it can be downloaded from [[AsymFormer ONNX Model](https://drive.google.com/file/d/1dSqmv19ErpxYcjl95I8buYeQi37qBlXQ/view?usp=sharing)]
-- The jupyter notebook about load ONNX model, check numeric overflow and generate mixed-precision TensorRT model can be downloaded from [Generate TensorRT](https://github.com/Fourier7754/AsymFormer/blob/main/Notebooks/Generate_TensorRT_Model.ipynb). 
+- The jupyter notebook contains loading ONNX model, checking numeric overflow and generating mixed-precision TensorRT model, which can be downloaded from [Generate TensorRT](https://github.com/Fourier7754/AsymFormer/blob/main/Notebooks/Generate_TensorRT_Model.ipynb). 
 
 ### Training
 The The souce code of AsymFormer will be released soon.
