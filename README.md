@@ -55,8 +55,7 @@ The TensorRT inference notebook can be found in [Folder](https://github.com/Four
 - Downlaod the TensorRT FP 16 model, which generated and optimized for RTX 3090 platform. [[AsymFormer FP16 TensorRT Model](https://drive.google.com/file/d/1Z57x6e_YSroMCh3p9ttwKB7P7VLfa81k/view?usp=sharing)]
 - Download the NYUv2 Dataset [NYUv2](https://drive.google.com/file/d/1YgcBRCjmkLlVukjmvkNu1A7O8bRd14Ek/view?usp=sharing).
 - Put the 'AsymFormer.engine' in the 'Inference' folder.
-- Modify the dataset path to your own path.
-- Run the Jupyter Notebook
+- Modify the dataset path to your own path ↓
 ```
 val_data = Data.RGBD_Dataset(transform=torchvision.transforms.Compose([scaleNorm(),
                                                                        ToTensor(),
@@ -66,6 +65,8 @@ val_data = Data.RGBD_Dataset(transform=torchvision.transforms.Compose([scaleNorm
                              txt_name='test.txt'    
                              )
 ```
+- Run the Jupyter Notebook
+
 
 ### Optimize the AsymFormer for your own platform
 You can generate your own TensorRT engine from the ONNX model.
