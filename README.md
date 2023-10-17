@@ -46,10 +46,9 @@ pip install pycuda
 We used the same data source as the ACNet. The processed NYUv2 data (.npy) can be downloaded by [Google Drive](https://drive.google.com/file/d/1YgcBRCjmkLlVukjmvkNu1A7O8bRd14Ek/view?usp=sharing).
 
 ## Usage
-Currently, we provided ONNX model and TensorRT FP16 model for evaluation and inference. 
+Currently, we have provided ONNX model and TensorRT FP16 model for evaluation and inference. 
 
 ### FP16 Inference (RTX3090 Platform)
-The 
 The TensorRT inference notebook can be found in [Folder](https://github.com/Fourier7754/AsymFormer/tree/main/Inference). You can test AsymFormer on your local environment by:
 - Downlaod the folder 'Inference'
 - Downlaod the TensorRT FP 16 model, which generated and optimized for RTX 3090 platform. [[AsymFormer FP16 TensorRT Model](https://drive.google.com/file/d/1Z57x6e_YSroMCh3p9ttwKB7P7VLfa81k/view?usp=sharing)]
