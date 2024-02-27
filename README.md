@@ -45,7 +45,27 @@ pip install pycuda
 
 ## Data Preparation
 ~~We used the same data source as the ACNet. The processed NYUv2 data (.npy) can be downloaded by [Google Drive](https://drive.google.com/file/d/1YgcBRCjmkLlVukjmvkNu1A7O8bRd14Ek/view?usp=sharing).~~
-We find the formal NYUv2 data has some mistake. So we re-generate training data from original NYUv2 matlab .mat file: [Google Drive](https://drive.google.com/file/d/1c18pTIsMX1SJvVPBFpqWa7QILn1NPxTY/view?usp=drive_link).
+We find the former NYUv2 data has some mistake. So we re-generate training data from original NYUv2 matlab .mat file: [Google Drive](https://drive.google.com/file/d/1c18pTIsMX1SJvVPBFpqWa7QILn1NPxTY/view?usp=drive_link).
+
+## Train
+To train the AsymFormer on NYUv2 dataset, you need to download the processed png format dataset [Google Drive](https://drive.google.com/file/d/1c18pTIsMX1SJvVPBFpqWa7QILn1NPxTY/view?usp=drive_link). and unzip the file to current folder. After that, the folder should be like:
+
+.
+├── data
+│   ├── images
+│   ├── depths
+│   ├── labels
+│   ├── train.txt
+│   └── test.txt
+├── utils
+│   ├── __init__.py
+│   └── utils.py
+├── src
+│   └── model files
+├── NYUv2_dataloader.py
+├── train.py
+└── eval.py
+
 
 ## Usage
 Currently, we have provided ONNX model and TensorRT FP16 model for evaluation and inference. 
