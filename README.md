@@ -50,6 +50,7 @@ We find the former NYUv2 data has some mistake. So we re-generate training data 
 ## Train
 To train the AsymFormer on NYUv2 dataset, you need to download the processed png format dataset [Google Drive](https://drive.google.com/file/d/1c18pTIsMX1SJvVPBFpqWa7QILn1NPxTY/view?usp=drive_link). and unzip the file to current folder. After that, the folder should be like:
 
+```
 .
 ├── data
 │   ├── images
@@ -65,7 +66,7 @@ To train the AsymFormer on NYUv2 dataset, you need to download the processed png
 ├── NYUv2_dataloader.py
 ├── train.py
 └── eval.py
-
+```
 
 ## Usage
 Currently, we have provided ONNX model and TensorRT FP16 model for evaluation and inference. 
