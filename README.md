@@ -72,7 +72,19 @@ Then run the train.py script.
 python train.py
 ```
 
-## Usage
+## Eval
+
+Run the eval.py script to evaluate AsymFormer on NYUv2 Dataset.
+```
+python eval.py
+```
+
+If you wish to run evaluation in multi-scale inference strategy, run the MS5_eval.py script:
+```
+python MS5_eval.py
+```
+
+## Model Exporting and Quantization
 Currently, we have provided ONNX model and TensorRT FP16 model for evaluation and inference. 
 
 ### FP16 Inference (RTX3090 Platform)
