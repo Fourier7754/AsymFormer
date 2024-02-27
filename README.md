@@ -67,6 +67,11 @@ To train the AsymFormer on NYUv2 dataset, you need to download the processed png
 └── eval.py
 ```
 
+Then run the train.py script.
+```
+python train.py
+```
+
 ## Usage
 Currently, we have provided ONNX model and TensorRT FP16 model for evaluation and inference. 
 
