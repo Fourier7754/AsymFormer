@@ -72,6 +72,8 @@ Then run the train.py script.
 python train.py
 ```
 
+**Note:** The training process with batch size 8 requires 19GB GPU VRAM. We will release mixed-precision training script soon wihch will require about 12GB of VRAM. However, the mixed-precision training will only work on Linux platform.
+
 ## Eval
 
 Run the eval.py script to evaluate AsymFormer on NYUv2 Dataset.
