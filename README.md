@@ -38,7 +38,7 @@ pip install scikit-image
 pip install opencv-python-headless==4.5.5.64
 pip install thop
 pip install onnx
-pip install oonnxruntime
+pip install onnxruntime
 pip install tensorrt==8.6.0
 pip install pycuda
 ```
