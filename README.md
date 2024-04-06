@@ -45,6 +45,7 @@ pip install pycuda
 
 ## Data Preparation
 ~~We used the same data source as the ACNet. The processed NYUv2 data (.npy) can be downloaded by [Google Drive](https://drive.google.com/file/d/1YgcBRCjmkLlVukjmvkNu1A7O8bRd14Ek/view?usp=sharing).~~
+
 We find the former NYUv2 data has some mistakes. So we re-generate training data from original NYUv2 matlab .mat file: [Google Drive](https://drive.google.com/file/d/1c18pTIsMX1SJvVPBFpqWa7QILn1NPxTY/view?usp=drive_link).
 
 SUNRGBD Dataset: [Google Drive](https://drive.google.com/file/d/1CcbUuLi0QdN7LwbieHVmutRyxaKyczpy/view?usp=sharing)
