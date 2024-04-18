@@ -1,4 +1,4 @@
-# AsymFormer: Asymmetrical Cross-Modal Representation Learning for Mobile Platform Real-Time RGB-D Semantic Segmentation (CVPR USM Workshop 2024)
+# AsymFormer: Asymmetrical Cross-Modal Representation Learning for Mobile Platform Real-Time RGB-D Semantic Segmentation (CVPR 2024 - USM Workshop )
 
 [[Paper](https://arxiv.org/abs/2309.14065)] [[Pre-trained Model](https://drive.google.com/file/d/1Pg6r3eJ245GaKbHfZob0Ek0CVhiS7VaR/view?usp=drive_link)] [[TensorRT Model](https://drive.google.com/file/d/1Z57x6e_YSroMCh3p9ttwKB7P7VLfa81k/view?usp=sharing)]
 
