@@ -50,7 +50,12 @@ parser.add_argument('--checkpoint', action='store_true', default=False,
                     help='Using Pytorch checkpoint or not')
 
 args = parser.parse_args()
-device = torch.device("cuda:0" if args.cuda and torch.cuda.is_available() else "cpu")
+if torch.cuda.is_available():
+    device = torch.device("cuda")
+elif torch.backends.mps.is_available():
+    device = torch.device("mps")
+else:
+    device = torch.device("cpu")
 image_w = 640
 image_h = 480
 
@@ -91,17 +96,9 @@ def create_lr_scheduler(optimizer,
 
 def train():
     setup_seed(2333)
-    train_data = Data.RGBD_Dataset(transform=transforms.Compose([Data.scaleNorm(),
-                                                                 Data.RandomScale((1.0, 1.4, 2.0)),
-                                                                 Data.RandomHSV((0.9, 1.1),
-                                                                                (0.9, 1.1),
-                                                                                (25, 25)),
-                                                                 Data.RandomCrop(image_h, image_w),
-                                                                 Data.RandomFlip(),
-                                                                 Data.ToTensor(),
-                                                                 Data.Normalize()]),
-                                   phase_train=True,
-                                   data_dir=args.data_dir)
+    # Use default transforms from NYUv2_dataloader which are compatible with the new API
+    train_data = Data.RGBD_Dataset(phase_train=True, data_dir=args.data_dir)
+    
     train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True,
                               num_workers=args.workers, pin_memory=False)
 
@@ -114,6 +111,10 @@ def train():
     model.train()
     model.to(device)
     CEL_weighted.to(device)
+    
+    # Initialize GPU Augmentation (includes Normalization)
+    gpu_aug = Data.GPUAugmentation()
+    gpu_aug.to(device)
 
     optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr,
                                   weight_decay=args.weight_decay)
@@ -137,7 +138,14 @@ def train():
 
             image = sample['image'].to(device)
             depth = sample['depth'].to(device)
-            target_scales = [sample[s].to(device) for s in ['label']]
+            label = sample['label'].to(device)
+            
+            # Apply GPU Augmentation (Elastic, Photometric, Normalize)
+            # Note: NYUv2_dataloader's TrainTransform returns raw float [0,1] images
+            # gpu_aug handles normalization.
+            image, depth, label = gpu_aug(image, depth, label)
+            
+            target_scales = [label]
 
             optimizer.zero_grad()
             out = model(image, depth)
@@ -161,6 +169,38 @@ def train():
               0, num_train)
 
     print("Training completed ")
+    
+    # --- Auto Evaluation at the end ---
+    print("\nStarting automatic evaluation...")
+    import subprocess
+    import sys
+    
+    last_ckpt_path = os.path.join(args.ckpt_dir, f"ckpt_epoch_{float(args.epochs):.2f}.pth")
+    if not os.path.exists(last_ckpt_path):
+         print(f"Warning: Expected checkpoint {last_ckpt_path} not found. Trying to find any .pth in {args.ckpt_dir}")
+         # Simple fallback logic
+         import glob
+         ckpts = glob.glob(os.path.join(args.ckpt_dir, "*.pth"))
+         if ckpts:
+             last_ckpt_path = sorted(ckpts, key=os.path.getmtime)[-1]
+             print(f"Using most recent checkpoint: {last_ckpt_path}")
+         else:
+             print("No checkpoints found. Skipping evaluation.")
+             return
+
+    eval_cmd = [
+        sys.executable, "eval.py",
+        "--last-ckpt", last_ckpt_path,
+        "--data-dir", args.data_dir,
+        "--save-json",
+        "--json-path", os.path.join(args.ckpt_dir, "final_eval_result.json")
+    ]
+    
+    try:
+        subprocess.check_call(eval_cmd)
+        print("Evaluation finished successfully.")
+    except subprocess.CalledProcessError as e:
+        print(f"Evaluation failed with exit code {e.returncode}")
 
 
 if __name__ == '__main__':

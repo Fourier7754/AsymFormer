@@ -2,7 +2,7 @@ import argparse
 import numpy as np
 import os
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+# os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 import torch
 import skimage.transform
 import torchvision
@@ -42,7 +42,10 @@ img_std = [0.229, 0.224, 0.225]
 
 
 def _load_block_pretrain_weight(model, pretrain_path):
-    pretrain_dict = torch.load(pretrain_path)['state_dict']
+    if torch.cuda.is_available():
+        pretrain_dict = torch.load(pretrain_path)['state_dict']
+    else:
+        pretrain_dict = torch.load(pretrain_path, map_location='cpu')['state_dict']
     new_state_dict = OrderedDict()
     for k, v in pretrain_dict.items():
         name = k
@@ -190,6 +193,22 @@ class Normalize(object):
         return sample
 
 
+class DictCompose:
+    def __init__(self, transforms):
+        self.transforms = transforms
+
+    def __call__(self, image, depth, label):
+        # Convert tv_tensors (C, H, W) to numpy (H, W, C) for legacy transforms
+        image = image.permute(1, 2, 0).numpy()
+        depth = depth.squeeze(0).numpy()
+        label = label.squeeze(0).numpy()
+
+        sample = {'image': image, 'depth': depth, 'label': label}
+        for t in self.transforms:
+            sample = t(sample)
+        return sample
+
+
 def visualize_result(img, depth, label, preds, info, args):
     # segmentation
     img = img.squeeze(0).transpose(0, 2, 1)
@@ -214,14 +233,15 @@ def visualize_result(img, depth, label, preds, info, args):
 
 def inference():
     model = B0_T(num_classes=40)
-    device = torch.device("cuda:0")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
     _load_block_pretrain_weight(model, pth_path)
     model.eval()
     model.to(device)
 
-    val_data = ACNet_data.RGBD_Dataset(transform=torchvision.transforms.Compose([scaleNorm(),
-                                                                                 ToTensor(),
-                                                                                 Normalize()]),
+    val_data = ACNet_data.RGBD_Dataset(transform=DictCompose([scaleNorm(),
+                                                              ToTensor(),
+                                                              Normalize()]),
                                        phase_train=False,
                                        data_dir=args.data_dir,
                                        txt_name='test.txt'

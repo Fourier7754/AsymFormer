@@ -176,9 +176,9 @@ def load_ckpt(model, optimizer, model_file, device):
     if os.path.isfile(model_file):
         print("=> loading checkpoint '{}'".format(model_file))
         if device.type == 'cuda':
-            checkpoint = torch.load(model_file)
+            checkpoint = torch.load(model_file, weights_only=False)
         else:
-            checkpoint = torch.load(model_file, map_location=lambda storage, loc: storage)
+            checkpoint = torch.load(model_file, map_location=lambda storage, loc: storage, weights_only=False)
         model.load_state_dict(checkpoint['state_dict'])
         if optimizer:
             optimizer.load_state_dict(checkpoint['optimizer'])

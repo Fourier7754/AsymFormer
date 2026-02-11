@@ -1,40 +1,93 @@
 from torch.nn import functional as F
-from src.mix_transformer import OverlapPatchEmbed, mit_b0
-from src.convnext import convnext_tiny
+try:
+    from src.mix_transformer import OverlapPatchEmbed, mit_b0
+    from src.convnext import asym_convnext_tiny as convnext_tiny
+    from src.MLPDecoder import DecoderHead
+except ImportError:
+    # Fallback for when running from within src directory or different python path
+    from mix_transformer import OverlapPatchEmbed, mit_b0
+    from convnext import asym_convnext_tiny as convnext_tiny
+    from MLPDecoder import DecoderHead
+
 from thop import profile
-from src.MLPDecoder import DecoderHead
 import os
 
 
 def load_pretrain2(net, pretrain_name):
-    dir_path = os.getcwd()
-    pretrain_path = os.path.join(dir_path, 'src/model_zoo/segformer/imagenet_pretrain', pretrain_name)
-    print("Pretrain_path:", pretrain_path)
+    # Try to find the weight file in multiple locations
+    possible_paths = [
+        os.path.join(os.getcwd(), 'src/model_zoo/segformer/imagenet_pretrain', pretrain_name),
+        os.path.join(os.getcwd(), 'model_zoo', pretrain_name),
+        os.path.join(os.getcwd(), pretrain_name),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), 'model_zoo', pretrain_name)
+    ]
+    
+    pretrain_path = ""
+    for p in possible_paths:
+        if os.path.exists(p):
+            pretrain_path = p
+            break
+            
+    if not pretrain_path:
+        print(f"Warning: Pretrain weight {pretrain_name} not found in {possible_paths}")
+        # Try to download
+        # List of possible URLs for mit_b0.pth
+        urls = [
+            "https://github.com/SzU-Zhang/SegFormer/releases/download/v1.0/mit_b0.pth",
+            "https://github.com/Enigmatisms/SegFormer/releases/download/v1.0/mit_b0.pth",
+            "https://github.com/bismex/SegFormer/releases/download/v1.0/mit_b0.pth"
+        ]
+        
+        save_dir = os.path.join(os.getcwd(), 'model_zoo')
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+        pretrain_path = os.path.join(save_dir, pretrain_name)
+        
+        success = False
+        for url in urls:
+            print(f"Attempting download from {url}...")
+            try:
+                torch.hub.download_url_to_file(url, pretrain_path)
+                # Verify size (should be > 1MB)
+                if os.path.exists(pretrain_path) and os.path.getsize(pretrain_path) > 1024 * 1024:
+                    print("Download successful.")
+                    success = True
+                    break
+                else:
+                    print("Download failed or file too small.")
+                    if os.path.exists(pretrain_path):
+                        os.remove(pretrain_path)
+            except Exception as e:
+                print(f"Download failed: {e}")
+        
+        if not success:
+            print("All download attempts failed. Proceeding without pretrain weights.")
+            return net
+            
+    print("Loading pretrain weights from:", pretrain_path)
     net_dict = net.state_dict()
-
-    pretrain_dict = torch.load(pretrain_path)
-
-    dict = {k: v for k, v in pretrain_dict.items() if k in net_dict}
-    net_dict.update(dict)
-    net.load_state_dict(net_dict)
+    try:
+        pretrain_dict = torch.load(pretrain_path, map_location='cpu')
+        # Handle case where weights are inside 'state_dict' key or similar
+        if 'state_dict' in pretrain_dict:
+            pretrain_dict = pretrain_dict['state_dict']
+            
+        # Filter out unnecessary keys and match shapes
+        filtered_dict = {k: v for k, v in pretrain_dict.items() if k in net_dict and v.shape == net_dict[k].shape}
+        
+        if len(filtered_dict) == 0:
+            print("Warning: No matching keys found in pretrain weights!")
+        else:
+            print(f"Loaded {len(filtered_dict)}/{len(net_dict)} keys from pretrain.")
+            
+        net_dict.update(filtered_dict)
+        net.load_state_dict(net_dict)
+    except Exception as e:
+        print(f"Failed to load pretrain weights: {e}")
+        
     return net
 
 
-model1 = convnext_tiny(pretrained=True, drop_path_rate=0.3)
-ft1 = model1.stages
-stem = model1.downsample_layers
-stem1 = [stem[0], stem[1], stem[2], stem[3]]
-layers1 = [
-    ft1[0],
-    ft1[1],
-    ft1[2],
-    ft1[3]]
-
-model2 = mit_b0()
-# model2 = load_pretrain2(model2, pretrain_name='mit_b0.pth')
-layers2 = [model2.block1, model2.block2, model2.block3, model2.block4]
-stem2 = [model2.patch_embed1, model2.patch_embed2, model2.patch_embed3, model2.patch_embed4]
-norm2 = [model2.norm1, model2.norm2, model2.norm3, model2.norm4]
 
 import torch
 from torch import nn
@@ -59,8 +112,8 @@ def channel_shuffle(x, groups: int):
 class Cross_Atten_Lite_split(nn.Module):
     def __init__(self, inc1, inc2):
         super(Cross_Atten_Lite_split, self).__init__()
-        self.midc1 = torch.tensor(inc1 // 4)
-        self.midc2 = torch.tensor(inc2 // 4)
+        self.register_buffer('midc1', torch.tensor(inc1 // 4, dtype=torch.int32), persistent=False)
+        self.register_buffer('midc2', torch.tensor(inc2 // 4, dtype=torch.int32), persistent=False)
 
         self.bn_x1 = nn.BatchNorm2d(inc1)
         self.bn_x2 = nn.BatchNorm2d(inc2)
@@ -86,19 +139,19 @@ class Cross_Atten_Lite_split(nn.Module):
         kq1 = self.kq1(x1.permute(0, 2, 3, 1).view(batch_size, h * w, -1))
         kq2 = self.kq2(x2.permute(0, 2, 3, 1).view(batch_size, h * w, -1))
         kq = channel_shuffle(torch.cat([kq1, kq2], dim=2), 2)
-        k1, q1, k2, q2 = torch.split(kq, self.midc2, dim=2)
+        k1, q1, k2, q2 = torch.split(kq, self.midc2.item(), dim=2)
 
         v = self.v_conv(x.permute(0, 2, 3, 1).view(batch_size, h * w, -1))
-        v1, v2 = torch.split(v, self.midc1, dim=2)
+        v1, v2 = torch.split(v, self.midc1.item(), dim=2)
 
         mat = torch.matmul(q1, k1.permute(0, 2, 1))
-        mat = mat / torch.sqrt(self.midc2)
+        mat = mat / torch.sqrt(self.midc2.float())
         mat = nn.Softmax(dim=-1)(mat)
         mat = self.dropout(mat)
         v1 = torch.matmul(mat, v1)
 
         mat = torch.matmul(q2, k2.permute(0, 2, 1))
-        mat = mat / torch.sqrt(self.midc2)
+        mat = mat / torch.sqrt(self.midc2.float())
         mat = nn.Softmax(dim=-1)(mat)
         mat = self.dropout(mat)
         v2 = torch.matmul(mat, v2)
@@ -120,7 +173,7 @@ class Cross_Atten_Lite_split(nn.Module):
 class SpatialAttention_max(nn.Module):
     def __init__(self, in_channels, reduction1=16, reduction2=8):
         super(SpatialAttention_max, self).__init__()
-        self.inc = torch.tensor(in_channels)
+        self.register_buffer('inc', torch.tensor(in_channels, dtype=torch.float32), persistent=False)
 
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
 
@@ -180,21 +233,21 @@ class SCC_Module(nn.Module):
 
 
 class down_sample_block(nn.Module):
-    def __init__(self, inc_depth, inc_rgb, block_num):
+    def __init__(self, inc_depth, inc_rgb, block_num, rgb_stem, depth_stem, rgb_layer, depth_layer, depth_norm):
         super(down_sample_block, self).__init__()
         self.block_num = block_num
 
         if block_num != 0:
-            self.depth_stem = stem2[block_num]
-            self.rgb_stem = stem1[block_num]
+            self.depth_stem = depth_stem
+            self.rgb_stem = rgb_stem
         else:
             self.depth_stem = OverlapPatchEmbed(in_chans=1, embed_dim=inc_depth)
-            self.rgb_stem = stem1[0]
+            self.rgb_stem = rgb_stem
 
-        self.rgb_layer = layers1[block_num]
-        self.depth_layer = layers2[block_num]
+        self.rgb_layer = rgb_layer
+        self.depth_layer = depth_layer
 
-        self.depth_norm = norm2[block_num]
+        self.depth_norm = depth_norm
 
         if self.block_num != 0:
             self.SCC = SCC_Module(inc_depth2=inc_depth, inc_rgb=inc_rgb)
@@ -223,19 +276,39 @@ class B0_T(nn.Module):
     def __init__(self, num_classes):
         super(B0_T, self).__init__()
 
+        model1 = convnext_tiny(pretrained=True, drop_path_rate=0.3)
+        ft1 = model1.stages
+        stem = model1.downsample_layers
+        stem1 = [stem[0], stem[1], stem[2], stem[3]]
+        layers1 = [
+            ft1[0],
+            ft1[1],
+            ft1[2],
+            ft1[3]]
+
+        model2 = mit_b0()
+        model2 = load_pretrain2(model2, pretrain_name='mit_b0.pth')
+        layers2 = [model2.block1, model2.block2, model2.block3, model2.block4]
+        stem2 = [model2.patch_embed1, model2.patch_embed2, model2.patch_embed3, model2.patch_embed4]
+        norm2 = [model2.norm1, model2.norm2, model2.norm3, model2.norm4]
+
         self.channel = [32, 64, 160, 256]
         channel_list2 = [96, 192, 384, 768]
 
-        self.down_sample_1 = down_sample_block(inc_depth=self.channel[0], inc_rgb=channel_list2[0], block_num=0)
+        self.down_sample_1 = down_sample_block(inc_depth=self.channel[0], inc_rgb=channel_list2[0], block_num=0,
+                                               rgb_stem=stem1[0], depth_stem=None, rgb_layer=layers1[0], depth_layer=layers2[0], depth_norm=norm2[0])
 
         self.down_sample_2 = down_sample_block(inc_depth=self.channel[1],
-                                               inc_rgb=channel_list2[1], block_num=1)
+                                               inc_rgb=channel_list2[1], block_num=1,
+                                               rgb_stem=stem1[1], depth_stem=stem2[1], rgb_layer=layers1[1], depth_layer=layers2[1], depth_norm=norm2[1])
 
         self.down_sample_3 = down_sample_block(inc_depth=self.channel[2],
-                                               inc_rgb=channel_list2[2], block_num=2)
+                                               inc_rgb=channel_list2[2], block_num=2,
+                                               rgb_stem=stem1[2], depth_stem=stem2[2], rgb_layer=layers1[2], depth_layer=layers2[2], depth_norm=norm2[2])
 
         self.down_sample_4 = down_sample_block(inc_depth=self.channel[3],
-                                               inc_rgb=channel_list2[3], block_num=3)
+                                               inc_rgb=channel_list2[3], block_num=3,
+                                               rgb_stem=stem1[3], depth_stem=stem2[3], rgb_layer=layers1[3], depth_layer=layers2[3], depth_norm=norm2[3])
 
         self.Decoder = DecoderHead(in_channels=self.channel, num_classes=num_classes, dropout_ratio=0.1,
                                    norm_layer=nn.BatchNorm2d,
@@ -260,10 +333,194 @@ class B0_T(nn.Module):
 
 
 if __name__ == '__main__':
-    model = B0_T(num_classes=40)
-    model.eval()
-    image = torch.rand(1, 3, 480, 640)
-    depth = torch.rand(1, 1, 480, 640)
-    macs, params = profile(model, inputs=(image, depth,))
-    print(macs / (1000 ** 3))
-    print(params / (1000 ** 2))
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--test-resolution', action='store_true', help='Test with increasing resolutions')
+    args = parser.parse_args()
+
+    if args.test_resolution:
+        import time
+        print("="*50)
+        print("Testing Resolution Scalability (Original AsymFormer)...")
+        print("="*50)
+        
+        if torch.cuda.is_available():
+            device = 'cuda'
+            torch.backends.cudnn.benchmark = True
+        elif torch.backends.mps.is_available():
+            device = 'mps'
+        else:
+            device = 'cpu'
+        print(f"Using device: {device}")
+        
+        resolutions = [
+            (224, 224),
+            (320, 320),
+            (384, 384),
+            (480, 480),
+            (480, 640),
+            (512, 512),
+            (640, 640),
+            (960, 1280),
+            (1024,1024),
+            (1024, 2048)
+        ]
+
+        for H, W in resolutions:
+            print(f"\nTesting Resolution: {H}x{W} ...")
+            try:
+                # Use custom FlopsProfiler for consistent comparison
+                import sys
+                import os
+                # Ensure we can import from utils
+                # Add project root to sys.path to find 'src' and 'utils'
+                current_dir = os.path.dirname(os.path.abspath(__file__))
+                project_root = os.path.dirname(current_dir)
+                if project_root not in sys.path:
+                    sys.path.append(project_root)
+                
+                # Import from src.utils.flops_counter because we are running from project root usually
+                # But inside src/AsymFormer.py, we might need different path
+                try:
+                    from src.utils.flops_counter import FlopsProfilerV2
+                except ImportError:
+                    from utils.flops_counter import FlopsProfilerV2
+                
+                model = B0_T(num_classes=40)
+                rgb_dummy = torch.randn(1, 3, H, W)
+                depth_dummy = torch.randn(1, 1, H, W)
+                
+                profiler = FlopsProfilerV2(model)
+                profiler.start_profile()
+                _ = model(rgb_dummy, depth_dummy)
+                profiler.stop_profile()
+                
+                macs = profiler.get_total_flops()
+                params = profiler.get_total_params()
+                
+                print(f"    GFLOPs: {macs / 1e9:.2f}")
+                print(f"    Params: {params / 1e6:.2f}M")
+                del model
+                del profiler
+            except Exception as e:
+                print(f"    Profile Error: {e}")
+
+            # Speed Test
+            try:
+                model_speed = B0_T(num_classes=40)
+                model_speed = model_speed.to(device)
+                model_speed.eval()
+                
+                rgb_bench = torch.randn(1, 3, H, W).to(device)
+                depth_bench = torch.randn(1, 1, H, W).to(device)
+                
+                # Warmup
+                for _ in range(10):
+                    _ = model_speed(rgb_bench, depth_bench)
+                if device == 'mps' and hasattr(torch.mps, 'synchronize'): torch.mps.synchronize()
+                elif device == 'cuda': torch.cuda.synchronize()
+                
+                # Bench Latency
+                num_iters = 50
+                start = time.time()
+                with torch.no_grad():
+                    for _ in range(num_iters):
+                        _ = model_speed(rgb_bench, depth_bench)
+                        if device == 'mps' and hasattr(torch.mps, 'synchronize'): torch.mps.synchronize()
+                        elif device == 'cuda': torch.cuda.synchronize()
+                end = time.time()
+                
+                avg_ms = (end - start) / num_iters * 1000
+                fps = 1000 / avg_ms
+                print(f"    Inference (FP32 Latency): {avg_ms:.2f} ms | FPS: {fps:.2f}")
+
+                # Bench Throughput
+                start = time.time()
+                with torch.no_grad():
+                    for _ in range(num_iters):
+                        _ = model_speed(rgb_bench, depth_bench)
+                if device == 'mps' and hasattr(torch.mps, 'synchronize'): torch.mps.synchronize()
+                elif device == 'cuda': torch.cuda.synchronize()
+                end = time.time()
+                
+                avg_ms_throughput = (end - start) / num_iters * 1000
+                fps_throughput = 1000 / avg_ms_throughput
+                print(f"    Inference (FP32 Throughput): {avg_ms_throughput:.2f} ms | FPS: {fps_throughput:.2f}")
+
+                # Speed (FP16)
+                try:
+                    model_fp16 = model_speed.half()
+                    rgb_bench_fp16 = rgb_bench.half()
+                    depth_bench_fp16 = depth_bench.half()
+
+                    # Warmup
+                    for _ in range(10):
+                        _ = model_fp16(rgb_bench_fp16, depth_bench_fp16)
+                    if device == 'mps' and hasattr(torch.mps, 'synchronize'): torch.mps.synchronize()
+                    elif device == 'cuda': torch.cuda.synchronize()
+                    
+                    # Bench Latency
+                    start = time.time()
+                    with torch.no_grad():
+                        for _ in range(num_iters):
+                            _ = model_fp16(rgb_bench_fp16, depth_bench_fp16)
+                            if device == 'mps' and hasattr(torch.mps, 'synchronize'): torch.mps.synchronize()
+                            elif device == 'cuda': torch.cuda.synchronize()
+                    end = time.time()
+                    
+                    avg_ms_fp16 = (end - start) / num_iters * 1000
+                    fps_fp16 = 1000 / avg_ms_fp16
+                    print(f"    Inference (FP16 Latency): {avg_ms_fp16:.2f} ms | FPS: {fps_fp16:.2f}")
+
+                    # Bench Throughput
+                    start = time.time()
+                    with torch.no_grad():
+                        for _ in range(num_iters):
+                            _ = model_fp16(rgb_bench_fp16, depth_bench_fp16)
+                        if device == 'mps' and hasattr(torch.mps, 'synchronize'): torch.mps.synchronize()
+                        elif device == 'cuda': torch.cuda.synchronize()
+                    end = time.time()
+                    
+                    avg_ms_fp16_throughput = (end - start) / num_iters * 1000
+                    fps_fp16_throughput = 1000 / avg_ms_fp16_throughput
+                    print(f"    Inference (FP16 Throughput): {avg_ms_fp16_throughput:.2f} ms | FPS: {fps_fp16_throughput:.2f}")
+                except Exception as e:
+                    print(f"    FP16 Error: {e}")
+                
+                del model_speed
+            except RuntimeError as e:
+                if "out of memory" in str(e):
+                    print(f"    OOM Error: {e}")
+                else:
+                    print(f"    Runtime Error: {e}")
+            except Exception as e:
+                    print(f"    Error: {e}")
+
+
+        print("="*50)
+    else:
+        # Original simple test
+        model = B0_T(num_classes=40)
+        model.eval()
+        image = torch.rand(1, 3, 480, 640)
+        depth = torch.rand(1, 1, 480, 640)
+        
+        # Use our custom profiler first for detailed output
+        try:
+            from utils.flops_counter import FlopsProfilerV2
+            print("\nUsing Custom FlopsProfiler:")
+            profiler = FlopsProfilerV2(model)
+            profiler.start_profile()
+            _ = model(image, depth)
+            profiler.stop_profile()
+            
+            print(f"GFLOPs: {profiler.get_total_flops() / 1e9:.4f}")
+            print(f"Params: {profiler.get_total_params() / 1e6:.4f}M")
+            profiler.print_model_profile()
+        except ImportError:
+            print("Custom profiler not found, skipping detailed profile.")
+
+        print("\nUsing thop:")
+        macs, params = profile(model, inputs=(image, depth,))
+        print(f"GFLOPs: {macs / 1e9:.4f}")
+        print(f"Params: {params / 1e6:.4f}M")

@@ -2,7 +2,7 @@ import argparse
 import numpy as np
 import os
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+# # os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 import torch
 import torchvision
 import time
@@ -32,6 +32,8 @@ parser.add_argument('--num-class', default=40, type=int,
                     help='number of classes')
 parser.add_argument('--visualize', default=False, action='store_true',
                     help='if output image')
+parser.add_argument('--save-json', action='store_true', help='save evaluation results to json')
+parser.add_argument('--json-path', default='', type=str, help='path to save json result')
 
 args = parser.parse_args()
 
@@ -43,7 +45,10 @@ img_std = [0.229, 0.224, 0.225]
 
 def _load_block_pretrain_weight(model, pretrain_path):
     model_dict = model.state_dict()
-    pretrain_dict = torch.load(pretrain_path)['state_dict']
+    if torch.cuda.is_available():
+        pretrain_dict = torch.load(pretrain_path, map_location='cpu')['state_dict']
+    else:
+        pretrain_dict = torch.load(pretrain_path, map_location='cpu')['state_dict']
     new_state_dict = OrderedDict()
     new_state_dict = {k: v for k, v in pretrain_dict.items() if k in model_dict}
 
@@ -100,6 +105,22 @@ class Normalize(object):
         return sample
 
 
+class DictCompose:
+    def __init__(self, transforms):
+        self.transforms = transforms
+
+    def __call__(self, image, depth, label):
+        # Convert tv_tensors (C, H, W) to numpy (H, W, C) for legacy transforms
+        image = image.permute(1, 2, 0).numpy()
+        depth = depth.squeeze(0).numpy()
+        label = label.squeeze(0).numpy()
+        
+        sample = {'image': image, 'depth': depth, 'label': label}
+        for t in self.transforms:
+            sample = t(sample)
+        return sample
+
+
 def visualize_result(img, depth, label, preds, info, args):
     # segmentation
     img = img.squeeze(0).transpose(0, 2, 1)
@@ -123,25 +144,35 @@ def visualize_result(img, depth, label, preds, info, args):
 
 
 def time_synchronized():
-    torch.cuda.synchronize() if torch.cuda.is_available() else None
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+    elif torch.backends.mps.is_available():
+        torch.mps.synchronize()
     return time.time()
 
 
 def inference():
-    device = torch.device("cuda:0")
-    _load_block_pretrain_weight(model, pth_dir)
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+    elif torch.backends.mps.is_available():
+        device = torch.device("mps")
+    else:
+        device = torch.device("cpu")
+    print(f"Using device: {device}")
+    pth_dir = args.last_ckpt
+    print(f"Loading weights from {pth_dir}..."); _load_block_pretrain_weight(model, pth_dir)
     model.eval()
     #model._model_deploy()
-    model.to(device)
+    print(f"Using device: {device}"); model.to(device)
 
-    val_data = Data.RGBD_Dataset(transform=torchvision.transforms.Compose([scaleNorm(),
-                                                                           ToTensor(),
-                                                                           Normalize()]),
+    val_data = Data.RGBD_Dataset(transform=DictCompose([scaleNorm(),
+                                                        ToTensor(),
+                                                        Normalize()]),
                                  phase_train=False,
                                  data_dir=args.data_dir,
                                  txt_name='test.txt'
                                  )
-    val_loader = DataLoader(val_data, batch_size=1, shuffle=False, num_workers=0, pin_memory=True)
+    print("Creating DataLoader (this might take time)..."); val_loader = DataLoader(val_data, batch_size=1, shuffle=False, num_workers=0, pin_memory=True)
 
     acc_meter = AverageMeter()
     intersection_meter = AverageMeter()
@@ -150,8 +181,11 @@ def inference():
     b_meter = AverageMeter()
     t = 0
     acc_collect = []
-    torch.cuda.synchronize()
-    starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
+    if torch.cuda.is_available():
+        if torch.cuda.is_available(): torch.cuda.synchronize()
+        starter, ender = (torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)) if torch.cuda.is_available() else (None, None)
+    else:
+        starter, ender = None, None
     timings = np.zeros((len(val_loader), 1))
     dummy_rgb = torch.rand([1, 3, 480, 640], device=device)
     dummy_depth = torch.rand([1, 1, 480, 640], device=device)
@@ -160,6 +194,7 @@ def inference():
         for _ in range(10):
             _ = model(dummy_rgb, dummy_depth)
 
+        print("Starting inference loop...")
         for batch_idx, sample in enumerate(val_loader):
             origin_image = sample['origin_image'].numpy()
             origin_depth = sample['origin_depth'].numpy()
@@ -167,11 +202,25 @@ def inference():
             depth = sample['depth'].to(device)
             label = sample['label'].numpy()
 
-            starter.record()
+            if starter:
+                starter.record()
+            else:
+                start_time = time.time()
             pred = model(image, depth)
-            ender.record()
-            torch.cuda.synchronize()
-            curr_time = starter.elapsed_time(ender)
+            if ender:
+                ender.record()
+            else:
+                end_time = time.time()
+            
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+            elif torch.backends.mps.is_available():
+                torch.mps.synchronize()
+            
+            if starter:
+                curr_time = starter.elapsed_time(ender)
+            else:
+                curr_time = (end_time - start_time) * 1000
             timings[batch_idx] = curr_time
 
             output = torch.max(pred, 1)[1] + 1
@@ -200,9 +249,31 @@ def inference():
     mAcc = (a_meter.average() / (b_meter.average() + 1e-10))
     print(mAcc.mean())
     print('[Eval Summary]:')
-    print('Mean IoU: {:.4}, Accuracy: {:.2f}%'
-          .format(iou.mean(), acc_meter.average() * 100))
-    print('平均推理时间：', timings.sum() / 654)
+    miou = iou.mean()
+    acc_percent = acc_meter.average() * 100
+    avg_inference_time = timings.sum() / len(val_loader)
+    
+    print('Mean IoU: {:.4}, Accuracy: {:.2f}%'.format(miou, acc_percent))
+    print('平均推理时间：', avg_inference_time)
+    
+    # Save results to JSON if requested
+    if hasattr(args, 'save_json') and args.save_json:
+        import json
+        result_data = {
+            "mIoU": float(miou),
+            "Accuracy": float(acc_percent),
+            "Avg_Inference_Time_ms": float(avg_inference_time),
+            "Class_IoU": iou.tolist(),
+            "Timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        json_path = os.path.join(os.path.dirname(args.output), 'eval_result.json')
+        if args.json_path:
+             json_path = args.json_path
+             
+        with open(json_path, 'w') as f:
+            json.dump(result_data, f, indent=4)
+        print(f"Evaluation results saved to {json_path}")
+        
     np.save('SCC_SRM5', np.array(acc_collect))
 
 
