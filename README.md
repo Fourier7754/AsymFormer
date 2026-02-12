@@ -29,6 +29,57 @@ Notably, it also provides impressive inference speeds:
 
 ---
 
+## 🔄 Changelog (2026-02-12 Update)
+
+> **Performance Update (Feb 12, 2026)**: CMA (Cross-Modal Attention) module has been optimized using PyTorch's native `F.scaled_dot_product_attention` (SDPA) for improved inference speed on Apple Silicon MPS.
+
+### ⚡ SDPA Optimization for CMA Module
+
+The `Cross_Atten_Lite_split` class in `src/AsymFormer.py` has been updated to use `F.scaled_dot_product_attention` instead of manual `matmul + softmax` operations. This provides:
+
+- **Better memory access patterns** (similar to Flash Attention)
+- **Fused kernel optimization** on supported backends
+- **Weight compatibility** - original pretrained weights can still be loaded without modification
+
+### 📊 MPS Benchmark Results (Apple M3 Max)
+
+Testing device: Apple M3 Max (MPS backend)
+
+#### Full Model Inference Speed (B0_T)
+
+| Resolution | Latency (ms) | FPS |
+|------------|--------------|-----|
+| 224×224 | 15.96 | 62.66 |
+| 320×320 | 20.30 | 49.26 |
+| 480×640 | 29.27 | 34.16 |
+
+#### CMA Module Speed Comparison (Original vs SDPA)
+
+| Resolution | Original (ms) | SDPA (ms) | Speedup |
+|------------|---------------|-----------|---------|
+| 60×80 | 5.08 | 4.42 | **1.15x** |
+| 120×160 | 74.39 | 58.24 | **1.28x** |
+
+#### Accuracy Verification
+
+| Metric | Original | SDPA |
+|--------|----------|------|
+| mIoU (NYUv2) | 54.0% | 54.0% ✓ |
+| Accuracy | 78.0% | 78.0% ✓ |
+
+**Conclusion**: SDPA provides **15-28% speedup** on CMA module with **zero accuracy loss**.
+
+### 🔧 Technical Details
+
+The SDPA implementation handles the dimension mismatch between V (`midc1`) and Q/K (`midc2`) by:
+1. Padding V to match Q/K dimensions
+2. Applying SDPA with fused kernel
+3. Slicing output back to original V dimension
+
+This maintains weight compatibility while gaining performance benefits.
+
+---
+
 ## 🔄 Changelog (2026-02-11 Update)
 
 > **Important Update (Feb 2026)**: This repository has been comprehensively updated to ensure compatibility with the latest PyTorch APIs and to improve code maintainability. All deprecated APIs have been replaced, and modern best practices have been implemented.
@@ -119,57 +170,6 @@ If you have existing code from the 2023 version, the main changes you need to be
 2. **Data Loading**: Update to use `torchvision.transforms.v2` if you want new augmentation features
 3. **Checkpoint Loading**: Add `map_location='cpu'` if you might load on CPU
 4. **CUDA Operations**: Wrap CUDA-specific operations with `torch.cuda.is_available()` checks
-
----
-
-## 🔄 Changelog (2026-02-12 Update)
-
-> **Performance Update (Feb 12, 2026)**: CMA (Cross-Modal Attention) module has been optimized using PyTorch's native `F.scaled_dot_product_attention` (SDPA) for improved inference speed on Apple Silicon MPS.
-
-### ⚡ SDPA Optimization for CMA Module
-
-The `Cross_Atten_Lite_split` class in `src/AsymFormer.py` has been updated to use `F.scaled_dot_product_attention` instead of manual `matmul + softmax` operations. This provides:
-
-- **Better memory access patterns** (similar to Flash Attention)
-- **Fused kernel optimization** on supported backends
-- **Weight compatibility** - original pretrained weights can still be loaded without modification
-
-### 📊 MPS Benchmark Results (Apple M3 Max)
-
-Testing device: Apple M3 Max (MPS backend)
-
-#### Full Model Inference Speed (B0_T)
-
-| Resolution | Latency (ms) | FPS |
-|------------|--------------|-----|
-| 224×224 | 15.96 | 62.66 |
-| 320×320 | 20.30 | 49.26 |
-| 480×640 | 29.27 | 34.16 |
-
-#### CMA Module Speed Comparison (Original vs SDPA)
-
-| Resolution | Original (ms) | SDPA (ms) | Speedup |
-|------------|---------------|-----------|---------|
-| 60×80 | 5.08 | 4.42 | **1.15x** |
-| 120×160 | 74.39 | 58.24 | **1.28x** |
-
-#### Accuracy Verification
-
-| Metric | Original | SDPA |
-|--------|----------|------|
-| mIoU (NYUv2) | 54.0% | 54.0% ✓ |
-| Accuracy | 78.0% | 78.0% ✓ |
-
-**Conclusion**: SDPA provides **15-28% speedup** on CMA module with **zero accuracy loss**.
-
-### 🔧 Technical Details
-
-The SDPA implementation handles the dimension mismatch between V (`midc1`) and Q/K (`midc2`) by:
-1. Padding V to match Q/K dimensions
-2. Applying SDPA with fused kernel
-3. Slicing output back to original V dimension
-
-This maintains weight compatibility while gaining performance benefits.
 
 ---
 
