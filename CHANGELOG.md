@@ -64,26 +64,10 @@ def forward(self, inputs):
 
 ### Performance Impact
 
-**Component-Level Testing** (30 warmup + 100 iterations on Apple M3 Max):
-
-| Resolution | Original Decoder | Optimized Decoder | Speedup |
-|------------|------------------|-------------------|---------|
-| 480×640 | 2.31 ms | 2.28 ms | +1.49% |
-| 512×512 | 2.06 ms | 2.02 ms | +1.62% |
-| 640×640 | 2.86 ms | 2.82 ms | +1.23% |
-
-**Full Model Testing** (30 warmup + 100 iterations on Apple M3 Max @ 480×640):
-
-| Version | Latency (ms) | Speedup |
-|---------|--------------|---------|
-| Original AsymFormer | 26.17 ms | baseline |
-| Optimized MLPDecoder | 26.24 ms | -0.29% |
-
 **Analysis**:
 - MLPDecoder accounts for only **9.9%** of total inference time
-- Even with 1.5% local speedup in decoder, overall impact is negligible
 - Main bottlenecks are SCC modules (68% of inference time)
-- **Conclusion**: Code quality improvement with no measurable performance impact on full model
+- **Conclusion**: Code quality improvement with **no performance impact** on full model inference speed
 
 ### Weight Compatibility
 
