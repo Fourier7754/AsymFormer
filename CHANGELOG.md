@@ -4,6 +4,74 @@ All notable changes to the AsymFormer project will be documented in this file.
 
 ---
 
+## [2026-02-13] ConvNeXt LayerNorm Optimization
+
+> **Performance Update**: ConvNeXt backbone's LayerNorm implementation has been optimized to use PyTorch's native `F.layer_norm` for improved performance on Apple Silicon MPS.
+
+### Optimization Details
+
+The custom `LayerNorm` class in `src/convnext.py` has been updated to use native `F.layer_norm` instead of manual mean/variance calculations for the `channels_first` data format.
+
+**Original Implementation** (manual calculation):
+```python
+u = x.mean(1, keepdim=True)
+s = (x - u).pow(2).mean(1, keepdim=True)
+x = (x - u) / torch.sqrt(s + self.eps)
+x = self.weight[:, None, None] * x + self.bias[:, None, None]
+```
+
+**Optimized Implementation** (native F.layer_norm):
+```python
+N, C, H, W = x.shape
+x = x.view(N, C, -1).transpose(1, 2)  # (N, H*W, C)
+x = F.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
+x = x.transpose(1, 2).view(N, C, H, W)  # (N, C, H, W)
+```
+
+### MPS Benchmark Results (Apple M3 Max)
+
+Testing device: Apple M3 Max (MPS backend)  
+Model: AsymFormer B0_T (40 classes)  
+Resolution: 480×640  
+Warmup: 30 iterations, Test: 100 iterations × 3 runs
+
+#### Full Model Performance Comparison
+
+| Version | Avg Time (ms) | Std Dev | FPS | Speedup |
+|---------|---------------|---------|-----|---------|
+| Original AsymFormer | 26.97 | ±0.10 | 37.08 | baseline |
+| Optimized ConvNeXt LayerNorm | 26.48 | ±0.09 | 37.76 | **+1.81%** |
+
+**Performance Gain**: 0.49 ms faster per frame, equivalent to **+0.68 FPS**
+
+#### Cumulative Optimization Impact
+
+When combined with previous SDPA optimization:
+- SDPA optimization (2026-02-12): ~3.6% speedup
+- ConvNeXt LayerNorm optimization (2026-02-13): ~1.8% speedup
+- **Total cumulative speedup**: **~5.4%**
+
+#### Compatibility Verification
+
+| Metric | Status |
+|--------|--------|
+| Parameter count | ✓ Unchanged (28.6M) |
+| Parameter names | ✓ 100% compatible |
+| Parameter shapes | ✓ 100% compatible |
+| Weight loading | ✓ Works seamlessly |
+| Numerical equivalence | ✓ Max diff < 1e-6 |
+
+**Conclusion**: ConvNeXt LayerNorm optimization provides **~1.8% additional speedup** with **full backward compatibility** with pretrained weights.
+
+### Technical Notes
+
+- The optimization leverages PyTorch's highly optimized native LayerNorm kernel
+- Reshaping overhead is minimal compared to the performance gain from native implementation
+- Works on all backends (CPU, CUDA, MPS) but shows best results on MPS
+- No changes to model architecture or parameter structure
+
+---
+
 ## [2026-02-12] SDPA Optimization for Attention Modules
 
 > **Performance Update**: All attention modules (CMA + MixTransformer) have been optimized using PyTorch's native `F.scaled_dot_product_attention` (SDPA) for improved inference speed on Apple Silicon MPS.
@@ -180,6 +248,7 @@ If you have existing code from the 2023 version, the main changes you need to be
 
 | Date | Version | Summary |
 |------|---------|---------|
+| 2026-02-13 | ConvNeXt Optimization | ConvNeXt LayerNorm optimized with native F.layer_norm for ~1.8% speedup (cumulative ~5.4% with SDPA) on Apple M3 Max |
 | 2026-02-12 | SDPA Update | Attention modules (CMA + MixTransformer) optimized with SDPA for ~3.6% end-to-end speedup on Apple M3 Max |
 | 2026-02-11 | Compatibility Update | PyTorch API modernization, new augmentation features, bug fixes |
 | 2023 | Initial Release | CVPR 2024 USM Workshop paper release |
