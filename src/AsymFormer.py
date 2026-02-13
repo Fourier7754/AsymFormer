@@ -241,6 +241,28 @@ class B0_T(nn.Module):
                                    norm_layer=nn.BatchNorm2d,
                                    embed_dim=256)
 
+    def load_state_dict(self, state_dict, strict=True):
+        """
+        Load state dict with backward compatibility for old checkpoint format.
+        Converts old SCC module keys (conv1, bn) to new format (conv_bn.0, conv_bn.1).
+        """
+        new_state_dict = {}
+        
+        for key, value in state_dict.items():
+            new_key = key
+            
+            # Convert old SCC module keys to new format
+            # Old: down_sample_X.SCC.conv1.weight -> New: down_sample_X.SCC.conv_bn.0.weight
+            # Old: down_sample_X.SCC.bn.* -> New: down_sample_X.SCC.conv_bn.1.*
+            if '.SCC.conv1.' in key:
+                new_key = key.replace('.SCC.conv1.', '.SCC.conv_bn.0.')
+            elif '.SCC.bn.' in key:
+                new_key = key.replace('.SCC.bn.', '.SCC.conv_bn.1.')
+            
+            new_state_dict[new_key] = value
+        
+        return super(B0_T, self).load_state_dict(new_state_dict, strict=strict)
+
     def forward(self, image, depth):
         input_shape = image.shape[-2:]
 

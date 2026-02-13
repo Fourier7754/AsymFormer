@@ -44,13 +44,21 @@ img_std = [0.229, 0.224, 0.225]
 
 def _load_block_pretrain_weight(model, pretrain_path):
     pretrain_dict = torch.load(pretrain_path)['state_dict']
-    new_state_dict = OrderedDict()
+    
+    # Convert old SCC module keys to new format for backward compatibility
+    converted_dict = OrderedDict()
     for k, v in pretrain_dict.items():
-            name = k
-            print(name)
-            new_state_dict[name] = v  # remove `module.`
+        name = k
+        # Old: down_sample_X.SCC.conv1.weight -> New: down_sample_X.SCC.conv_bn.0.weight
+        # Old: down_sample_X.SCC.bn.* -> New: down_sample_X.SCC.conv_bn.1.*
+        if '.SCC.conv1.' in name:
+            name = name.replace('.SCC.conv1.', '.SCC.conv_bn.0.')
+        elif '.SCC.bn.' in name:
+            name = name.replace('.SCC.bn.', '.SCC.conv_bn.1.')
+        print(name)
+        converted_dict[name] = v
 
-    model.load_state_dict(new_state_dict)
+    model.load_state_dict(converted_dict)
 
 # transform
 class scaleNorm(object):

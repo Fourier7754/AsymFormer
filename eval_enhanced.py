@@ -19,7 +19,7 @@ from utils.utils import load_ckpt, intersectionAndUnion, AverageMeter, accuracy,
 pth_dir = './model_M1/ckpt_epoch_500.00.pth'
 model = B0_T(num_classes=40)
 
-parser = argparse.ArgumentParser(description='RGBD Sementic Segmentation')
+parser = argparse.ArgumentParser(description='RGBD Sementic Segmentation (Enhanced - aligned with train_enhanced.py)')
 parser.add_argument('--data-dir', default='./data', metavar='DIR',
                     help='path to dataset')
 parser.add_argument('-o', '--output', default='./result/', metavar='DIR',
@@ -34,6 +34,15 @@ parser.add_argument('--visualize', default=False, action='store_true',
                     help='if output image')
 parser.add_argument('--save-json', action='store_true', help='save evaluation results to json')
 parser.add_argument('--json-path', default='', type=str, help='path to save json result')
+parser.add_argument('--use-ema', action='store_true', default=False,
+                    help='Use EMA weights from checkpoint')
+parser.add_argument('--depth-norm', default='percentile', type=str,
+                    choices=['percentile', 'robust_zscore', 'standard'],
+                    help='Depth normalization mode: percentile (2-98%%), robust_zscore (MAD), standard (mean/std)')
+parser.add_argument('--depth-percentile-low', default=2, type=float,
+                    help='Lower percentile for depth clipping (default: 2)')
+parser.add_argument('--depth-percentile-high', default=98, type=float,
+                    help='Upper percentile for depth clipping (default: 98)')
 
 args = parser.parse_args()
 
@@ -43,12 +52,18 @@ img_mean = [0.485, 0.456, 0.406]
 img_std = [0.229, 0.224, 0.225]
 
 
-def _load_block_pretrain_weight(model, pretrain_path):
+def _load_block_pretrain_weight(model, pretrain_path, use_ema=False):
     model_dict = model.state_dict()
     if torch.cuda.is_available():
-        pretrain_dict = torch.load(pretrain_path, map_location='cpu')['state_dict']
+        checkpoint = torch.load(pretrain_path, map_location='cpu', weights_only=False)
     else:
-        pretrain_dict = torch.load(pretrain_path, map_location='cpu')['state_dict']
+        checkpoint = torch.load(pretrain_path, map_location='cpu', weights_only=False)
+    
+    if use_ema and 'state_dict_ema' in checkpoint:
+        print("Loading EMA weights...")
+        pretrain_dict = checkpoint['state_dict_ema']
+    else:
+        pretrain_dict = checkpoint['state_dict']
     
     # Convert old SCC module keys to new format for backward compatibility
     converted_dict = OrderedDict()
@@ -97,6 +112,11 @@ class ToTensor(object):
 
 
 class Normalize(object):
+    def __init__(self, depth_norm_mode='percentile', p_low=2, p_high=98):
+        self.depth_norm_mode = depth_norm_mode
+        self.p_low = p_low
+        self.p_high = p_high
+
     def __call__(self, sample):
         image, depth = sample['image'], sample['depth']
         origin_image = image.clone()
@@ -109,7 +129,32 @@ class Normalize(object):
                                                  std=[0.26415541082494515, 0.2728415392982039, 0.2831175140191598])(
             image)
 
-        depth = torchvision.transforms.Normalize(mean=[2.8424503515351494], std=[0.9932836506164299])(depth)
+        # Instance normalization - aligned with train_enhanced.py
+        mask = depth > 1e-6
+        if mask.sum() > 10:
+            valid_pixels = depth[mask]
+            
+            if self.depth_norm_mode == 'percentile':
+                v_min = torch.quantile(valid_pixels, self.p_low / 100.0)
+                v_max = torch.quantile(valid_pixels, self.p_high / 100.0)
+                d_clipped = torch.clamp(depth, v_min, v_max)
+                mean = (v_min + v_max) / 2
+                std = (v_max - v_min) / 2 + 1e-6
+                depth = (d_clipped - mean) / std
+                depth[~mask] = 0.0
+                
+            elif self.depth_norm_mode == 'robust_zscore':
+                median = torch.median(valid_pixels)
+                mad = torch.median(torch.abs(valid_pixels - median)) + 1e-6
+                depth = (depth - median) / (1.4826 * mad)
+                depth[~mask] = 0.0
+                
+            else: # standard
+                mean = valid_pixels.mean()
+                std = valid_pixels.std() + 1e-6
+                depth = (depth - mean) / std
+                depth[~mask] = 0.0
+
         sample['origin_image'] = origin_image
         sample['origin_depth'] = origin_depth
         sample['image'] = image
@@ -173,14 +218,16 @@ def inference():
         device = torch.device("cpu")
     print(f"Using device: {device}")
     pth_dir = args.last_ckpt
-    print(f"Loading weights from {pth_dir}..."); _load_block_pretrain_weight(model, pth_dir)
+    print(f"Loading weights from {pth_dir}..."); _load_block_pretrain_weight(model, pth_dir, use_ema=args.use_ema)
     model.eval()
     #model._model_deploy()
     print(f"Using device: {device}"); model.to(device)
 
     val_data = Data.RGBD_Dataset(transform=DictCompose([scaleNorm(),
                                                         ToTensor(),
-                                                        Normalize()]),
+                                                        Normalize(depth_norm_mode=args.depth_norm,
+                                                                  p_low=args.depth_percentile_low,
+                                                                  p_high=args.depth_percentile_high)]),
                                  phase_train=False,
                                  data_dir=args.data_dir,
                                  txt_name='test.txt'
