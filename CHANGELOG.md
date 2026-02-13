@@ -62,13 +62,6 @@ def forward(self, inputs):
     return x
 ```
 
-### Performance Impact
-
-**Analysis**:
-- MLPDecoder accounts for only **9.9%** of total inference time
-- Main bottlenecks are SCC modules (68% of inference time)
-- **Conclusion**: Code quality improvement with **no performance impact** on full model inference speed
-
 ### Weight Compatibility
 
 ✅ **Full backward compatibility maintained**:
