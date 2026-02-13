@@ -11,84 +11,6 @@ except ImportError:
 
 from thop import profile
 import os
-
-
-def load_pretrain2(net, pretrain_name):
-    # Try to find the weight file in multiple locations
-    possible_paths = [
-        os.path.join(os.getcwd(), 'src/model_zoo/segformer/imagenet_pretrain', pretrain_name),
-        os.path.join(os.getcwd(), 'model_zoo', pretrain_name),
-        os.path.join(os.getcwd(), pretrain_name),
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), 'model_zoo', pretrain_name)
-    ]
-    
-    pretrain_path = ""
-    for p in possible_paths:
-        if os.path.exists(p):
-            pretrain_path = p
-            break
-            
-    if not pretrain_path:
-        print(f"Warning: Pretrain weight {pretrain_name} not found in {possible_paths}")
-        # Try to download
-        # List of possible URLs for mit_b0.pth
-        urls = [
-            "https://github.com/SzU-Zhang/SegFormer/releases/download/v1.0/mit_b0.pth",
-            "https://github.com/Enigmatisms/SegFormer/releases/download/v1.0/mit_b0.pth",
-            "https://github.com/bismex/SegFormer/releases/download/v1.0/mit_b0.pth"
-        ]
-        
-        save_dir = os.path.join(os.getcwd(), 'model_zoo')
-        if not os.path.exists(save_dir):
-            os.makedirs(save_dir)
-        pretrain_path = os.path.join(save_dir, pretrain_name)
-        
-        success = False
-        for url in urls:
-            print(f"Attempting download from {url}...")
-            try:
-                torch.hub.download_url_to_file(url, pretrain_path)
-                # Verify size (should be > 1MB)
-                if os.path.exists(pretrain_path) and os.path.getsize(pretrain_path) > 1024 * 1024:
-                    print("Download successful.")
-                    success = True
-                    break
-                else:
-                    print("Download failed or file too small.")
-                    if os.path.exists(pretrain_path):
-                        os.remove(pretrain_path)
-            except Exception as e:
-                print(f"Download failed: {e}")
-        
-        if not success:
-            print("All download attempts failed. Proceeding without pretrain weights.")
-            return net
-            
-    print("Loading pretrain weights from:", pretrain_path)
-    net_dict = net.state_dict()
-    try:
-        pretrain_dict = torch.load(pretrain_path, map_location='cpu')
-        # Handle case where weights are inside 'state_dict' key or similar
-        if 'state_dict' in pretrain_dict:
-            pretrain_dict = pretrain_dict['state_dict']
-            
-        # Filter out unnecessary keys and match shapes
-        filtered_dict = {k: v for k, v in pretrain_dict.items() if k in net_dict and v.shape == net_dict[k].shape}
-        
-        if len(filtered_dict) == 0:
-            print("Warning: No matching keys found in pretrain weights!")
-        else:
-            print(f"Loaded {len(filtered_dict)}/{len(net_dict)} keys from pretrain.")
-            
-        net_dict.update(filtered_dict)
-        net.load_state_dict(net_dict)
-    except Exception as e:
-        print(f"Failed to load pretrain weights: {e}")
-        
-    return net
-
-
-
 import torch
 from torch import nn
 
@@ -112,8 +34,10 @@ def channel_shuffle(x, groups: int):
 class Cross_Atten_Lite_split(nn.Module):
     def __init__(self, inc1, inc2):
         super(Cross_Atten_Lite_split, self).__init__()
-        self.register_buffer('midc1', torch.tensor(inc1 // 4, dtype=torch.int32), persistent=False)
-        self.register_buffer('midc2', torch.tensor(inc2 // 4, dtype=torch.int32), persistent=False)
+        self.midc1 = inc1 // 4
+        self.midc2 = inc2 // 4
+        self.need_pad = self.midc1 < self.midc2
+        self.pad_size = self.midc2 - self.midc1 if self.need_pad else 0
 
         self.bn_x1 = nn.BatchNorm2d(inc1)
         self.bn_x2 = nn.BatchNorm2d(inc2)
@@ -126,33 +50,28 @@ class Cross_Atten_Lite_split(nn.Module):
 
         self.bn_last = nn.BatchNorm2d(inc1)
         self.dropout_p = 0.2
+        self.scale = self.midc2 ** -0.5
         self._init_weight()
 
     def forward(self, x, x1, x2):
-        batch_size = x.size(0)
-        h = x.size(2)
-        w = x.size(3)
-        midc1_val = self.midc1.item()
-        midc2_val = self.midc2.item()
+        B, _, H, W = x.shape
+        N = H * W
 
-        x1 = self.bn_x1(x1)
-        x2 = self.bn_x2(x2)
+        x1_norm = self.bn_x1(x1).flatten(2).transpose(1, 2)
+        x2_norm = self.bn_x2(x2).flatten(2).transpose(1, 2)
 
-        kq1 = self.kq1(x1.permute(0, 2, 3, 1).view(batch_size, h * w, -1))
-        kq2 = self.kq2(x2.permute(0, 2, 3, 1).view(batch_size, h * w, -1))
+        kq1 = self.kq1(x1_norm)
+        kq2 = self.kq2(x2_norm)
         kq = channel_shuffle(torch.cat([kq1, kq2], dim=2), 2)
-        k1, q1, k2, q2 = torch.split(kq, midc2_val, dim=2)
+        k1, q1, k2, q2 = kq.split(self.midc2, dim=2)
 
-        v = self.v_conv(x.permute(0, 2, 3, 1).view(batch_size, h * w, -1))
-        v1, v2 = torch.split(v, midc1_val, dim=2)
+        v = self.v_conv(x.flatten(2).transpose(1, 2))
+        v1, v2 = v.split(self.midc1, dim=2)
 
-        # Use SDPA for better performance (15-28% speedup on MPS)
-        # Pad V to match Q/K dimensions for SDPA compatibility
-        if midc1_val < midc2_val:
-            v1 = F.pad(v1, (0, midc2_val - midc1_val))
-            v2 = F.pad(v2, (0, midc2_val - midc1_val))
+        if self.need_pad:
+            v1 = F.pad(v1, (0, self.pad_size))
+            v2 = F.pad(v2, (0, self.pad_size))
 
-        # Add head dimension: (B, N, dim) -> (B, 1, N, dim)
         q1 = q1.unsqueeze(1)
         k1 = k1.unsqueeze(1)
         v1 = v1.unsqueeze(1)
@@ -160,24 +79,17 @@ class Cross_Atten_Lite_split(nn.Module):
         k2 = k2.unsqueeze(1)
         v2 = v2.unsqueeze(1)
 
-        scale = midc2_val ** -0.5
         dropout_p = self.dropout_p if self.training else 0.0
-        v1 = F.scaled_dot_product_attention(q1, k1, v1, dropout_p=dropout_p, scale=scale)
-        v2 = F.scaled_dot_product_attention(q2, k2, v2, dropout_p=dropout_p, scale=scale)
+        v1 = F.scaled_dot_product_attention(q1, k1, v1, dropout_p=dropout_p, scale=self.scale).squeeze(1)
+        v2 = F.scaled_dot_product_attention(q2, k2, v2, dropout_p=dropout_p, scale=self.scale).squeeze(1)
 
-        v1 = v1.squeeze(1)
-        v2 = v2.squeeze(1)
+        if self.need_pad:
+            v1 = v1[:, :, :self.midc1]
+            v2 = v2[:, :, :self.midc1]
 
-        # Slice back to original dimension
-        if midc1_val < midc2_val:
-            v1 = v1[:, :, :midc1_val]
-            v2 = v2[:, :, :midc1_val]
-
-        v = torch.cat([v1, v2], dim=2).reshape(batch_size, h, w, -1)
-        v = self.out_conv(v)
-        v = v.permute(0, 3, 1, 2)
-        v = self.bn_last(v)
-        v = v + x
+        v = torch.cat([v1, v2], dim=2)
+        v = self.out_conv(v).transpose(1, 2).reshape(B, -1, H, W)
+        v = self.bn_last(v) + x
 
         return v
 
@@ -190,8 +102,8 @@ class Cross_Atten_Lite_split(nn.Module):
 class SpatialAttention_max(nn.Module):
     def __init__(self, in_channels, reduction1=16, reduction2=8):
         super(SpatialAttention_max, self).__init__()
-        self.register_buffer('inc', torch.tensor(in_channels, dtype=torch.float32), persistent=False)
-        self.register_buffer('inc_squared', torch.tensor(in_channels * in_channels, dtype=torch.float32), persistent=False)
+        self.in_channels = in_channels
+        self.scale_factor = 1.0 / (in_channels * in_channels)
 
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
 
@@ -210,15 +122,14 @@ class SpatialAttention_max(nn.Module):
         self._init_weight()
 
     def forward(self, x):
-        b, c, _, _ = x.size()
-        y_avg = self.avg_pool(x).view(b, c)
+        b, c, h, w = x.size()
+        y_avg = self.avg_pool(x).squeeze(-1).squeeze(-1)
 
-        y_spatial = self.fc_spatial(y_avg).view(b, c, 1, 1)
-        y_channel = self.fc_channel(y_avg).view(b, c, 1, 1).sigmoid()
+        y_spatial = self.fc_spatial(y_avg).unsqueeze(-1).unsqueeze(-1)
+        y_channel = self.fc_channel(y_avg).unsqueeze(-1).unsqueeze(-1).sigmoid()
 
         spatial_weighted = x * y_spatial
-        map = torch.sum(spatial_weighted, dim=1, keepdim=True) / self.inc_squared
-        map = torch.sigmoid(map)
+        map = (spatial_weighted.sum(dim=1, keepdim=True) * self.scale_factor).sigmoid()
         
         return map * x * y_channel
 
@@ -234,17 +145,16 @@ class SCC_Module(nn.Module):
         channel = inc_rgb + inc_depth2
 
         self.fus_atten = SpatialAttention_max(in_channels=channel)
-        self.conv1 = nn.Conv2d(channel, inc_depth2, kernel_size=1, bias=False)
-        self.bn = nn.BatchNorm2d(inc_depth2)
+        self.conv_bn = nn.Sequential(
+            nn.Conv2d(channel, inc_depth2, kernel_size=1, bias=False),
+            nn.BatchNorm2d(inc_depth2)
+        )
 
         self.cross_atten = Cross_Atten_Lite_split(inc_depth2, inc_rgb)
 
     def forward(self, depth_out, rgb_out):
-        fus_s = torch.cat([depth_out, rgb_out], dim=1)
-        fus_s = self.fus_atten(fus_s)
-        fus_s = self.conv1(fus_s)
-        fus_s = self.bn(fus_s)
-
+        fus_s = self.fus_atten(torch.cat([depth_out, rgb_out], dim=1))
+        fus_s = self.conv_bn(fus_s)
         fus_s = self.cross_atten(fus_s, depth_out, rgb_out)
 
         return fus_s
@@ -305,7 +215,6 @@ class B0_T(nn.Module):
             ft1[3]]
 
         model2 = mit_b0()
-        model2 = load_pretrain2(model2, pretrain_name='mit_b0.pth')
         layers2 = [model2.block1, model2.block2, model2.block3, model2.block4]
         stem2 = [model2.patch_embed1, model2.patch_embed2, model2.patch_embed3, model2.patch_embed4]
         norm2 = [model2.norm1, model2.norm2, model2.norm3, model2.norm4]
