@@ -191,6 +191,7 @@ class SpatialAttention_max(nn.Module):
     def __init__(self, in_channels, reduction1=16, reduction2=8):
         super(SpatialAttention_max, self).__init__()
         self.register_buffer('inc', torch.tensor(in_channels, dtype=torch.float32), persistent=False)
+        self.register_buffer('inc_squared', torch.tensor(in_channels * in_channels, dtype=torch.float32), persistent=False)
 
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
 
@@ -209,16 +210,16 @@ class SpatialAttention_max(nn.Module):
         self._init_weight()
 
     def forward(self, x):
-
-        b, c, h, w = x.size()
+        b, c, _, _ = x.size()
         y_avg = self.avg_pool(x).view(b, c)
 
         y_spatial = self.fc_spatial(y_avg).view(b, c, 1, 1)
-        y_channel = self.fc_channel(y_avg).view(b, c, 1, 1)
-        y_channel = y_channel.sigmoid()
+        y_channel = self.fc_channel(y_avg).view(b, c, 1, 1).sigmoid()
 
-        map = (x * (y_spatial)).sum(dim=1) / self.inc
-        map = (map / self.inc).sigmoid().unsqueeze(dim=1)
+        spatial_weighted = x * y_spatial
+        map = torch.sum(spatial_weighted, dim=1, keepdim=True) / self.inc_squared
+        map = torch.sigmoid(map)
+        
         return map * x * y_channel
 
     def _init_weight(self):
@@ -276,7 +277,7 @@ class down_sample_block(nn.Module):
 
         depth_out, H, W = self.depth_stem(depth)
 
-        for i, blk in enumerate(self.depth_layer):
+        for blk in self.depth_layer:
             depth_out = blk(depth_out, H, W)
         depth_out = self.depth_norm(depth_out)
         depth_out = depth_out.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
