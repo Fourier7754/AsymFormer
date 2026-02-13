@@ -4,6 +4,97 @@ All notable changes to the AsymFormer project will be documented in this file.
 
 ---
 
+## [2026-02-13] MLPDecoder Code Quality Improvement
+
+> **Code Quality Update**: MLPDecoder module has been refactored to improve code quality and maintainability with no performance impact.
+
+### Optimization Details
+
+The `DecoderHead` class in `src/MLPDecoder.py` has been optimized to improve code readability and reduce redundant operations.
+
+**Changes Made**:
+1. **Removed unused imports**:
+   - Removed `numpy` import (not used)
+   - Removed `torch.nn.modules.module` import (not used)
+
+2. **Optimized tensor operations**:
+   - Pre-extracted target size `(target_h, target_w)` to avoid repeated `c1.shape[2:]` calls
+   - Extracted batch size from `c1` instead of `c4` for consistency
+   - Reordered processing to handle `c1` first (no interpolation needed)
+
+3. **Improved dropout handling**:
+   - Changed from direct call to explicit `None` check: `if self.dropout is not None`
+   - More explicit and readable code flow
+
+**Before**:
+```python
+def forward(self, inputs):
+    c1, c2, c3, c4 = inputs
+    n, _, h, w = c4.shape
+    
+    _c4 = self.linear_c4(c4).permute(0,2,1).reshape(n, -1, c4.shape[2], c4.shape[3])
+    _c4 = F.interpolate(_c4, size=c1.size()[2:], mode='bilinear', align_corners=self.align_corners)
+    # ... similar for c3, c2, c1
+    
+    _c = self.linear_fuse(torch.cat([_c4, _c3, _c2, _c1], dim=1))
+    x = self.dropout(_c)
+    x = self.linear_pred(x)
+    return x
+```
+
+**After**:
+```python
+def forward(self, inputs):
+    c1, c2, c3, c4 = inputs
+    n = c1.shape[0]
+    target_h, target_w = c1.shape[2], c1.shape[3]
+    target_size = (target_h, target_w)
+    
+    _c1 = self.linear_c1(c1).permute(0, 2, 1).reshape(n, -1, target_h, target_w)
+    _c2 = self.linear_c2(c2).permute(0, 2, 1).reshape(n, -1, c2.shape[2], c2.shape[3])
+    _c2 = F.interpolate(_c2, size=target_size, mode='bilinear', align_corners=self.align_corners)
+    # ... similar for c3, c4
+    
+    _c = self.linear_fuse(torch.cat([_c4, _c3, _c2, _c1], dim=1))
+    if self.dropout is not None:
+        _c = self.dropout(_c)
+    x = self.linear_pred(_c)
+    return x
+```
+
+### Performance Impact
+
+**Component-Level Testing** (30 warmup + 100 iterations on Apple M3 Max):
+
+| Resolution | Original Decoder | Optimized Decoder | Speedup |
+|------------|------------------|-------------------|---------|
+| 480×640 | 2.31 ms | 2.28 ms | +1.49% |
+| 512×512 | 2.06 ms | 2.02 ms | +1.62% |
+| 640×640 | 2.86 ms | 2.82 ms | +1.23% |
+
+**Full Model Testing** (30 warmup + 100 iterations on Apple M3 Max @ 480×640):
+
+| Version | Latency (ms) | Speedup |
+|---------|--------------|---------|
+| Original AsymFormer | 26.17 ms | baseline |
+| Optimized MLPDecoder | 26.24 ms | -0.29% |
+
+**Analysis**:
+- MLPDecoder accounts for only **9.9%** of total inference time
+- Even with 1.5% local speedup in decoder, overall impact is negligible
+- Main bottlenecks are SCC modules (68% of inference time)
+- **Conclusion**: Code quality improvement with no measurable performance impact on full model
+
+### Weight Compatibility
+
+✅ **Full backward compatibility maintained**:
+- All optimizations preserve mathematical computation
+- No changes to model architecture or parameter shapes
+- Pretrained weights can be loaded without modification
+- Output is numerically identical (max diff: 0.00e+00)
+
+---
+
 ## [2026-02-13] LAFS Code Quality Improvement
 
 > **Code Quality Update**: LAFS (Local Attention-Guided Feature Selection) module has been refactored to improve code quality and maintainability with no performance impact.
@@ -313,6 +404,8 @@ If you have existing code from the 2023 version, the main changes you need to be
 
 | Date | Version | Summary |
 |------|---------|---------|
+| 2026-02-13 | MLPDecoder Code Quality | MLPDecoder refactored for better code quality. No performance impact (decoder is only 9.9% of total time) |
+| 2026-02-13 | LAFS Code Quality | LAFS module refactored for better code quality. No performance impact (within measurement error) |
 | 2026-02-13 | ConvNeXt Optimization | ConvNeXt LayerNorm optimized with native F.layer_norm for ~1.8% speedup (cumulative ~5.4% with SDPA) on Apple M3 Max |
 | 2026-02-12 | SDPA Update | Attention modules (CMA + MixTransformer) optimized with SDPA for ~3.6% end-to-end speedup on Apple M3 Max |
 | 2026-02-11 | Compatibility Update | PyTorch API modernization, new augmentation features, bug fixes |

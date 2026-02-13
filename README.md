@@ -33,7 +33,8 @@ Notably, it also provides impressive inference speeds:
 
 | Date | Update | Summary |
 |------|--------|---------|
-| 2026-02-13 | LAFS Code Quality Improvement | Refactored LAFS module to reduce tensor operations and improve code readability. **No performance impact** (within measurement error < 1%). Full weight compatibility maintained. |
+| 2026-02-13 | MLPDecoder Code Quality | Refactored MLPDecoder to improve code readability and reduce redundant operations. **No performance impact** (decoder is only 9.9% of total inference time). Full weight compatibility maintained. |
+| 2026-02-13 | LAFS Code Quality | Refactored LAFS module to reduce tensor operations and improve code readability. **No performance impact** (within measurement error < 1%). Full weight compatibility maintained. |
 | 2026-02-13 | ConvNeXt LayerNorm Optimization | Optimized ConvNeXt LayerNorm with native `F.layer_norm` for **~1.8% additional speedup** on Apple M3 Max (cumulative **~5.4% total speedup** with SDPA) |
 | 2026-02-12 | SDPA Optimization | Attention modules (CMA + MixTransformer) optimized with `F.scaled_dot_product_attention` for **~3.6% speedup** on Apple M3 Max @ 480×640 (zero accuracy loss, full weight compatibility) |
 | 2026-02-11 | API Modernization | PyTorch 2.x compatibility, `torchvision.transforms.v2` migration, advanced augmentations (CutMix/MixUp/Mosaic), multi-platform support |
