@@ -166,5 +166,4 @@ If you find this repository useful in your research, please consider citing:
 
 ## Contact
 
-For any inquiries, please contact siqi.du1014@outlook.com.
-Home page of the author: [Siqi.DU's ResearchGate](https://www.researchgate.net/profile/Siqi-Du-4)
+Please open a GitHub Issue in this repository for questions about the code.
